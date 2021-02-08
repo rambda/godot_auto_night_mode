@@ -1,4 +1,4 @@
-# Godot Auto Dark Mode
+# Godot Auto Night Mode
 Automatically switches between the day and night color theme of Godot at scheduled times.
 
 Instruction: Toggles settings in `Editor -> Editor Settings... -> Interface -> Theme -> Auto Night Mode`
