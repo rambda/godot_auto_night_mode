@@ -5,6 +5,6 @@ Automatically switches between the day and night color theme of Godot at schedul
 
 * Supports custom themes (untested).
 
-* Supports latitude and longitude location.
+* Supports latitude and longitude location (automatically calculate sun times).
 
 * Plus: you can add custom properties to theme profile (untested).
