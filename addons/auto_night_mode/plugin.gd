@@ -2,7 +2,7 @@ tool
 extends EditorPlugin
 
 # template of addon property path in editor setting
-const template := "interface/theme/auto_dark_mode/%s"
+const template := "interface/theme/auto_night_mode/%s"
 
 # [properties, default_value] of addons
 const properties = {
