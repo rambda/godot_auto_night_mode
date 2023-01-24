@@ -1,234 +1,202 @@
 tool
 extends EditorPlugin
 
-# template of addon property path in editor setting
-const template := "interface/theme/auto_night_mode/%s"
-
-# [properties, default_value] of addons
-const properties = {
-	"day_theme": {},
-	"night_theme": {},
-
-	"sunrise_time/hour": 0,
-	"sunrise_time/minute": 0,
-
-	"sunset_time/hour": 0,
-	"sunset_time/minute": 0,
-
-	"use_coordinates": false,
-	"coordinates/latitude": .0,
-	"coordinates/longitude": .0,
-
-	"remove_properties_after_disabling": true,
-}
-
-# editor settings of what's a theme
-const theme_properties = [
-		"text_editor/theme/color_theme",
-		"interface/theme/preset",
-		"interface/theme/icon_and_font_color",
-		"interface/theme/base_color",
-		"interface/theme/accent_color",
-		"interface/theme/contrast",
-		"interface/theme/border_size",
-		"interface/theme/use_graph_node_headers",
-		"interface/theme/relationship_line_opacity",
-		"interface/theme/highlight_tabs",
-		"interface/theme/additional_spacing",
-		"interface/theme/custom_theme",
-]
-
+# editor setting property path prefix
+const prefix = "interface/auto_night_mode/"
+const Consts = preload("consts.gd")
 
 var editor_settings := get_editor_interface().get_editor_settings()
 
+var last_theme := ""
 # temporarily disable addon to prevent the signal-connected function calling itself
-var disabling := false
+var disabled := false
 
-# praise the sun ... algorithm
+# sun time algorithm
 var sun := preload("sun.gd").new()
 
-################################################################################
-# getter & setter
-################################################################################
-
-func get_setting(n: String):
-	return editor_settings.get(template % n)
-
-func set_setting(n: String, v) -> void:
-	editor_settings.set(template % n, v)
-
-func has_setting(n: String) -> bool:
-	return editor_settings.has_setting(template % n)
-
-func erase_setting(n: String) -> void:
-	editor_settings.erase(template % n)
-
-func get_sunrise_time() -> float:
-	return get_setting("sunrise_time/hour") + get_setting("sunrise_time/minute") / 60.0
-
-func get_sunset_time() -> float:
-	return get_setting("sunset_time/hour") + get_setting("sunset_time/minute") / 60.0
-
 
 ################################################################################
-# virtual functions & signal function
+# helpers
 ################################################################################
+
+func get_sunrise_hour() -> float:
+	return editor_settings.get(prefix + "sunrise_time/hour")\
+		+ editor_settings.get(prefix + "sunrise_time/minute") / 60.0
+
+func get_sunset_hour() -> float:
+	return editor_settings.get(prefix + "sunset_time/hour")\
+		+ editor_settings.get(prefix + "sunset_time/minute") / 60.0
+
+func get_now_theme() -> String:
+	var td = OS.get_time()
+	var t: float = td.hour + td.minute / 60.0
+	var sunrise := get_sunrise_hour()
+	var sunset := get_sunset_hour()
+
+	var sunrise_before_sunset := sunrise < sunset
+	var time_gte_sunrise := (t >= sunrise and t < sunset)
+	var is_day := time_gte_sunrise if sunrise_before_sunset else not time_gte_sunrise
+
+	if is_day:
+		return "day_theme"
+	else:
+		return "night_theme"
+
+################################################################################
+# plugin behaviours
+################################################################################
+
+
+func _init() -> void:
+	init_missing_settings()
+
 
 func enable_plugin() -> void:
-	init_missing_settings()
+	apply_theme(get_now_theme())
+	if not editor_settings.is_connected("settings_changed", self, "_settings_changed"):
+		editor_settings.connect("settings_changed", self, "_settings_changed")
 
 
 func disable_plugin() -> void:
-	if get_setting("remove_properties_after_disabling"):
-		for n in properties:
-			erase_setting(n)
+	if editor_settings.is_connected("settings_changed", self, "_settings_changed"):
+		editor_settings.disconnect("settings_changed", self, "_settings_changed")
+	if editor_settings.get_setting(prefix + "erase_settings_after_disabling"):
+		for n in Consts.addon_property_defaults:
+			editor_settings.erase(prefix + n)
+		for theme_p in Consts.theme_properties:
+			var d_p = prefix + "day_theme/" + theme_p
+			editor_settings.erase(d_p)
+		for theme_p in Consts.theme_properties:
+			var d_p = prefix + "night_theme/" + theme_p
+			editor_settings.erase(d_p)
 
 
-func _on_settings_changed() -> void:
-	if disabling:
+func _settings_changed() -> void:
+	if self.disabled:
 		return
 
-	init_missing_settings()
-
-	if get_setting("use_coordinates"):
+	if editor_settings.get(prefix + "coordinates/use_coordinates"):
 		update_sun_times()
 
-	update()
+	var now_theme = get_now_theme()
 
+	if now_theme != last_theme:
+		apply_theme(now_theme)
+		print(now_theme + " applied.")
+	else:
+		print("save ", now_theme)
+		save_theme(now_theme)
 
-func _ready() -> void:
-	update()
-	editor_settings.connect("settings_changed", self, "_on_settings_changed")
+	last_theme = now_theme
 
 
 var last_second: int = -1
 func _process(delta: float) -> void:
-	if disabling:
+	if self.disabled:
 		return
 
 	var t = OS.get_time()
 	if t.second != last_second and t.second == 0:
 		last_second = t.second
-		update()
+		apply_theme(get_now_theme())
 
 
 ################################################################################
-# actual functions
+# functions
 ################################################################################
 
 # init editor settings if haven't been added
 func init_missing_settings() -> void:
-	disabling = true
+	self.disabled = true
 
-	for n in properties:
-		if not has_setting(n):
-			var v = properties[n]
-			var full = template % n
-			editor_settings.set(full, v)
-			editor_settings.set_initial_value(full, v, false)
-			editor_settings.add_property_info( { "name": full, "type": typeof(v) } )
+	for n in Consts.addon_property_defaults:
+		if not editor_settings.has_setting(prefix + n):
+			var default = Consts.addon_property_defaults[n]
+			var pname = prefix + n
+			editor_settings.set(pname, default)
+			editor_settings.set_initial_value(pname, default, false)
 
-	if not get_setting("day_theme").size():
-		set_setting("day_theme", get_current_theme().duplicate(true))
+	for info in Consts.addon_property_infos:
+		var new = info.duplicate()
+		new.name = prefix + new.name
+		editor_settings.add_property_info(new)
 
-	if not get_setting("night_theme").size():
-		set_setting("night_theme", get_current_theme().duplicate(true))
+	for theme_p in Consts.theme_properties:
+		var d_p = prefix + "day_theme/" + theme_p
+		if not editor_settings.has_setting(d_p):
+			editor_settings.set(d_p, editor_settings.get(theme_p))
 
-	disabling = false
+		var n_p = prefix + "night_theme/" + theme_p
+		if not editor_settings.has_setting(n_p):
+			editor_settings.set(n_p, editor_settings.get(theme_p))
+
+	for info in Consts.theme_properties_infos:
+		var day_info = info.duplicate()
+		day_info.name = prefix + "day_theme/" + day_info.name
+		editor_settings.add_property_info(day_info)
+
+		var night_info = info.duplicate()
+		night_info.name = prefix + "night_theme/" + night_info.name
+		editor_settings.add_property_info(night_info)
+
+	self.disabled = false
 
 
 # update sunrise/sunset time accourding to coordinates
 func update_sun_times():
-	disabling = true
+	self.disabled = true
 
-	var longitude: float = get_setting("coordinates/longitude")
-	var latitude: float = get_setting("coordinates/latitude")
+	var longitude: float = editor_settings.get(prefix + "coordinates/longitude")
+	var latitude: float = editor_settings.get(prefix + "coordinates/latitude")
 
 	var time_zone = OS.get_time_zone_info()
 	var h_bias = time_zone.bias / 60
-	print("Time Zone is %s" % time_zone.name)
+	print("Time Zone [%s] applied." % time_zone.name)
 
-	var sr = get_sunrise_time()
+	var sr = get_sunrise_hour()
 	var new_sr = sun.calc_sun_time(longitude, latitude, sun.SUNRISE)
 	if not is_equal_approx(sr, new_sr):
 		var h = int(new_sr)
 		var m = int((new_sr - h) * 60.0)
 		h = h + h_bias
 		h = h - 24 if h > 24 else h
-		set_setting("sunrise_time/hour", h)
-		set_setting("sunrise_time/minute", m)
+		editor_settings.set(prefix + "sunrise_time/hour", h)
+		editor_settings.set(prefix + "sunrise_time/minute", m)
 
-	var ss = get_sunset_time()
+	var ss = get_sunset_hour()
 	var new_ss = sun.calc_sun_time(longitude, latitude, sun.SUNSET)
 	if not is_equal_approx(ss, new_ss):
 		var h = int(new_ss)
 		var m = int((new_ss - h) * 60.0)
 		h = h + h_bias
 		h = h - 24 if h > 24 else h
-		set_setting("sunset_time/hour", h)
-		set_setting("sunset_time/minute", m)
+		editor_settings.set(prefix + "sunset_time/hour", h)
+		editor_settings.set(prefix + "sunset_time/minute", m)
 
-	disabling = false
+	self.disabled = false
 
 
-# update to day/night theme if current theme doesn't equal to corresponding theme
-func update():
-	var td = OS.get_time()
-	var t: float = td.hour + td.minute / 60.0
-	var sunrise := get_sunrise_time()
-	var sunset := get_sunset_time()
+# save current theme as preset
+func save_theme(theme_path: String):
+	for theme_p in Consts.theme_properties:
+		var d_p = prefix + theme_path + "/" + theme_p
+		editor_settings.set(d_p, editor_settings.get(theme_p))
 
-	var rise: bool
-	var sunrise_before_sunset := sunrise < sunset
-	var time_gte_sunrise := (t >= sunrise and t < sunset)
 
-	if sunrise_before_sunset:
-		if time_gte_sunrise:
-			rise = true
+func apply_theme(theme_path: String):
+	self.disabled = true
+
+	var has_changed := false
+	for theme_p in Consts.theme_properties:
+		var d_p = prefix + theme_path + "/" + theme_p
+		var old = editor_settings.get(theme_p)
+		var new = editor_settings.get(d_p)
+		if old == new or (old is float and is_equal_approx(old, new)):
+			continue
 		else:
-			rise = false
-	else:
-		if time_gte_sunrise:
-			rise = false
-		else:
-			rise = true
+			editor_settings.set(theme_p, editor_settings.get(d_p))
+			has_changed = true
 
-	var cur_theme = get_current_theme()
-	var day_theme = get_setting("day_theme")
-	var night_theme = get_setting("night_theme")
+	self.disabled = false
 
-	if rise:
-		if not compare_dict(cur_theme, day_theme):
-			print("Day theme applied.")
-			apply_theme(day_theme)
-	else:
-		if not compare_dict(cur_theme, night_theme):
-			print("Night theme applied.")
-			apply_theme(night_theme)
-
-
-func get_current_theme():
-	var theme = {}
-	for property in theme_properties:
-		theme[property] = editor_settings.get(property)
-	return theme
-
-
-func apply_theme(theme: Dictionary):
-	for k in theme:
-		var v = theme[k]
-		editor_settings.set(k, v)
-
-
-func compare_dict(d1: Dictionary, d2: Dictionary):
-	for k in d1:
-		if d1[k] is float:
-			if not is_equal_approx(d1[k], d2[k]):
-#				print("key: %s" % k)
-#				print("%s ! is_equal_approx %s" % [d1[k], d2[k]])
-				return false
-		elif d1[k] != d2[k]:
-#			print("key: %s" % k)
-#			print("%s != %s" % [d1[k], d2[k]])
-			return false
-	return true
+	return has_changed

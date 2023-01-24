@@ -60,11 +60,11 @@ static func calc_sun_time(longitude: float, latitude: float, sun_time: int, zeni
 	var cosH := (cos(TO_RAD*zenith) - (sinDec * sin(TO_RAD*latitude))) / (cosDec * cos(TO_RAD*latitude))
 
 	if cosH > 1:
-		print("the sun never rises on this location (on the specified date).")
+		printerr("the sun never rises on this location (on the specified date).")
 		return -1.0
 
 	if cosH < -1:
-		print("the sun never rises on this location (on the specified date).")
+		printerr("the sun never rises on this location (on the specified date).")
 		return -1.0
 
 	#7b. finish calculating H and convert into hours
@@ -84,5 +84,4 @@ static func calc_sun_time(longitude: float, latitude: float, sun_time: int, zeni
 	var UT := T - lngHour
 	UT = fposmod( UT, 24) # UTC time in decimal format (e.g. 23.23)
 
-	print('coordinate is valid')
 	return UT
