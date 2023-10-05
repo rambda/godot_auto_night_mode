@@ -90,14 +90,12 @@ func _settings_changed() -> void:
 	last_theme = now_theme
 
 
-var last_second: int = -1
 func _process(delta: float) -> void:
 	if self.disabled:
 		return
 
 	var t = Time.get_time_dict_from_system()
-	if t.second != last_second and t.second == 0:
-		last_second = t.second
+	if t.second == 0:
 		apply_theme(get_now_theme())
 
 
