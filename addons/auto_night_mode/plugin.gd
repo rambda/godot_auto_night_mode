@@ -51,7 +51,7 @@ func _init() -> void:
 	init_missing_settings()
 
 
-func _enable_plugin() -> void:
+func _ready() -> void:
 	apply_theme(get_now_theme())
 	if not editor_settings.is_connected("settings_changed", Callable(self, "_settings_changed")):
 		editor_settings.connect("settings_changed", Callable(self, "_settings_changed"))
