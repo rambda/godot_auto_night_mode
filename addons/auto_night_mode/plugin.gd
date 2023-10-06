@@ -1,4 +1,4 @@
-tool
+@tool
 extends EditorPlugin
 
 # editor setting property path prefix
@@ -28,7 +28,7 @@ func get_sunset_hour() -> float:
 		+ editor_settings.get(prefix + "sunset_time/minute") / 60.0
 
 func get_now_theme() -> String:
-	var td = OS.get_time()
+	var td = Time.get_time_dict_from_system()
 	var t: float = td.hour + td.minute / 60.0
 	var sunrise := get_sunrise_hour()
 	var sunset := get_sunset_hour()
@@ -51,15 +51,15 @@ func _init() -> void:
 	init_missing_settings()
 
 
-func enable_plugin() -> void:
+func _ready() -> void:
 	apply_theme(get_now_theme())
-	if not editor_settings.is_connected("settings_changed", self, "_settings_changed"):
-		editor_settings.connect("settings_changed", self, "_settings_changed")
+	if not editor_settings.is_connected("settings_changed", Callable(self, "_settings_changed")):
+		editor_settings.connect("settings_changed", Callable(self, "_settings_changed"))
 
 
-func disable_plugin() -> void:
-	if editor_settings.is_connected("settings_changed", self, "_settings_changed"):
-		editor_settings.disconnect("settings_changed", self, "_settings_changed")
+func _disable_plugin() -> void:
+	if editor_settings.is_connected("settings_changed", Callable(self, "_settings_changed")):
+		editor_settings.disconnect("settings_changed", Callable(self, "_settings_changed"))
 	if editor_settings.get_setting(prefix + "erase_settings_after_disabling"):
 		for n in Consts.addon_property_defaults:
 			editor_settings.erase(prefix + n)
@@ -90,14 +90,12 @@ func _settings_changed() -> void:
 	last_theme = now_theme
 
 
-var last_second: int = -1
 func _process(delta: float) -> void:
 	if self.disabled:
 		return
 
-	var t = OS.get_time()
-	if t.second != last_second and t.second == 0:
-		last_second = t.second
+	var t = Time.get_time_dict_from_system()
+	if t.second == 0:
 		apply_theme(get_now_theme())
 
 
@@ -149,7 +147,7 @@ func update_sun_times():
 	var longitude: float = editor_settings.get(prefix + "coordinates/longitude")
 	var latitude: float = editor_settings.get(prefix + "coordinates/latitude")
 
-	var time_zone = OS.get_time_zone_info()
+	var time_zone = Time.get_time_zone_from_system()
 	var h_bias = time_zone.bias / 60
 	print("Time Zone [%s] applied." % time_zone.name)
 

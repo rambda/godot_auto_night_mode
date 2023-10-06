@@ -9,7 +9,7 @@ enum { SUNRISE, SUNSET }
 
 static func calc_sun_time(longitude: float, latitude: float, sun_time: int, zenith := 90.8) -> float:
 
-	var now = OS.get_datetime()
+	var now = Time.get_datetime_dict_from_system()
 	var day = now.day
 	var month = now.month
 	var year =now.year
@@ -45,8 +45,8 @@ static func calc_sun_time(longitude: float, latitude: float, sun_time: int, zeni
 	RA = fposmod( RA, 360 ) #NOTE: RA adjusted into the range [0,360)
 
 	#5b. right ascension value needs to be in the same quadrant as L
-	var Lquadrant  := (floor(L/90)) * 90
-	var RAquadrant := (floor(RA/90)) * 90
+	var Lquadrant : float = (floor(L/90)) * 90
+	var RAquadrant : float = (floor(RA/90)) * 90
 	RA = RA + (Lquadrant - RAquadrant)
 
 	#5c. right ascension value needs to be converted into hours
